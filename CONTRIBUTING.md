@@ -23,6 +23,15 @@ npm ci
 npm run test:fast
 ```
 
+Or let the setup script check and install the toolchain for you (Node 22 via nvm/fnm/volta, `npm ci`,
+and a sidecar smoke check). Add `--desktop` for Rust and the Tauri system packages, `--test` to run the
+fast gate, or `--check` to report without installing anything:
+
+```bash
+bash scripts/setup-dev.sh                                        # macOS / Linux
+powershell -ExecutionPolicy Bypass -File scripts\setup-dev.ps1   # Windows (-Desktop, -Test, -Check)
+```
+
 The Node sidecar itself has no runtime npm dependencies and can be started with
 `node sidecar/index.js`. Desktop development additionally requires Rust and the
 [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/).
