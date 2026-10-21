@@ -41,6 +41,7 @@ warn() { printf '  %s!%s %s\n' "$Y" "$N" "$*"; WARNINGS=$((WARNINGS+1)); }
 fail() { printf '  %s✗%s %s\n' "$R" "$N" "$*" >&2; exit 1; }
 have() { command -v "$1" >/dev/null 2>&1; }
 WARNINGS=0
+USED_NVM=0
 
 confirm() {
   [ "$YES" = 1 ] && return 0
@@ -58,11 +59,24 @@ esac
 
 node_major() { node -p 'process.versions.node.split(".")[0]' 2>/dev/null || echo 0; }
 
+# nvm is not written for `set -eu`: sourcing it auto-applies .nvmrc and returns 3 when that version is
+# not installed yet, which would end this script silently. Load it with --no-use and relax the shell
+# options around every nvm call.
 load_nvm() {
   export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
+  [ -s "$NVM_DIR/nvm.sh" ] || return 1
+  set +eu
   # shellcheck disable=SC1091
-  [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh" && return 0
-  return 1
+  . "$NVM_DIR/nvm.sh" --no-use
+  set -eu
+  type nvm >/dev/null 2>&1
+}
+run_nvm() {
+  local rc
+  set +eu
+  nvm "$@"; rc=$?
+  set -eu
+  return $rc
 }
 
 # --- 1. base tools -----------------------------------------------------------------------------
@@ -90,7 +104,8 @@ elif [ "$CHECK_ONLY" = 1 ]; then
   else warn "Node $NODE_MAJOR is not installed (found: ${current/#0/none})"; fi
 else
   if type nvm >/dev/null 2>&1; then
-    nvm install "$NODE_MAJOR" && nvm use "$NODE_MAJOR" >/dev/null
+    USED_NVM=1
+    run_nvm install "$NODE_MAJOR" && run_nvm use "$NODE_MAJOR" >/dev/null
   elif have fnm; then
     fnm install "$NODE_MAJOR" && fnm use "$NODE_MAJOR"
   elif have volta; then
@@ -100,7 +115,8 @@ else
   elif confirm "No Node version manager found. Install nvm (user-level, ~/.nvm) and Node $NODE_MAJOR?"; then
     curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | METHOD=script PROFILE=/dev/null bash
     load_nvm || fail "nvm installed but could not be loaded; open a new shell and re-run"
-    nvm install "$NODE_MAJOR" && nvm use "$NODE_MAJOR" >/dev/null
+    USED_NVM=1
+    run_nvm install "$NODE_MAJOR" && run_nvm use "$NODE_MAJOR" >/dev/null
     warn "nvm was installed without editing your shell profile; add this to it:  . \"\$HOME/.nvm/nvm.sh\""
   else
     fail "Node >= $NODE_MIN_MAJOR is required (Node $NODE_MAJOR recommended): https://nodejs.org or https://github.com/nvm-sh/nvm"
@@ -196,6 +212,10 @@ if [ "$RUN_TESTS" = 1 ] && [ "$CHECK_ONLY" = 0 ]; then
 fi
 
 if [ "$WARNINGS" -gt 0 ]; then step "Done ($WARNINGS warning(s) above)"; else step "Done"; fi
+if [ "$USED_NVM" = 1 ]; then
+  # this script's PATH change dies with it; the user's shell needs nvm loaded to see Node 22
+  echo "  First, in each new terminal:  . \"\$HOME/.nvm/nvm.sh\" && nvm use $NODE_MAJOR"
+fi
 cat <<EOF
   Start the station:   npm start            then open http://localhost:8787
   Merge gate:          npm run test:fast
