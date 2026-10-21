@@ -67,8 +67,13 @@ load_nvm() {
 
 # --- 1. base tools -----------------------------------------------------------------------------
 step "Base tools ($PLATFORM)"
-have git || fail "git is required: https://git-scm.com/downloads"
-ok "git $(git --version | awk '{print $3}')"
+# git is only needed to update the checkout, not to run it (a GitHub zip download works too). On macOS
+# /usr/bin/git is a stub that exits non-zero until the Command Line Tools are installed, so run it.
+if git --version >/dev/null 2>&1; then
+  ok "git $(git --version | awk '{print $3}')"
+else
+  warn "git is not usable (on macOS: xcode-select --install); fine for a zip download, needed to pull updates"
+fi
 have curl || fail "curl is required"
 ok "curl"
 
@@ -93,7 +98,7 @@ else
   elif [ "$current" -ge "$NODE_MIN_MAJOR" ]; then
     warn "node $(node -v) works, but CI uses Node $NODE_MAJOR; install nvm or fnm to switch versions"
   elif confirm "No Node version manager found. Install nvm (user-level, ~/.nvm) and Node $NODE_MAJOR?"; then
-    curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | PROFILE=/dev/null bash
+    curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | METHOD=script PROFILE=/dev/null bash
     load_nvm || fail "nvm installed but could not be loaded; open a new shell and re-run"
     nvm install "$NODE_MAJOR" && nvm use "$NODE_MAJOR" >/dev/null
     warn "nvm was installed without editing your shell profile; add this to it:  . \"\$HOME/.nvm/nvm.sh\""
